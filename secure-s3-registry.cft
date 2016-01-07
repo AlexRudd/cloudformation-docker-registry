@@ -1,0 +1,318 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Secure s3 backed docker registry",
+  "Mappings": {
+    "AWSRegionToAMI": {
+      "eu-central-1": {
+        "AMI": "ami-ffafb293"
+      },
+      "ap-northeast-1": {
+        "AMI": "ami-dae8c1b4"
+      },
+      "us-gov-west-1": {
+        "AMI": "ami-a98e33c8"
+      },
+      "sa-east-1": {
+        "AMI": "ami-4e981c22"
+      },
+      "ap-southeast-2": {
+        "AMI": "ami-eeadf58d"
+      },
+      "ap-southeast-1": {
+        "AMI": "ami-085a9a6b"
+      },
+      "us-east-1": {
+        "AMI": "ami-cbfdb2a1"
+      },
+      "us-west-2": {
+        "AMI": "ami-16cfd277"
+      },
+      "us-west-1": {
+        "AMI": "ami-0eacc46e"
+      },
+      "eu-west-1": {
+        "AMI": "ami-c26bcab1"
+      }
+    }
+  },
+
+  "Parameters": {
+
+    "TrustedIpBlock": {
+      "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\\/([0-9]|[1-2][0-9]|3[0-2]))$",
+      "ConstraintDescription": "Must be valid CIDR notation",
+      "Default": "0.0.0.0/32",
+      "Description": "The net block (CIDR) that this instance will accept SSH connections from.",
+      "Type": "String"
+    },
+
+    "HttpsIpBlock": {
+      "AllowedPattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\\/([0-9]|[1-2][0-9]|3[0-2]))$",
+      "ConstraintDescription": "Must be valid CIDR notation",
+      "Default": "0.0.0.0/32",
+      "Description": "The net block (CIDR) that this instance will accept HTTPS connections from.",
+      "Type": "String"
+    },
+
+    "VPC" : {
+      "Type" : "AWS::EC2::VPC::Id",
+      "Description" : "Enter the VPC you want to deploy the instance to."
+    },
+
+    "Subnet" : {
+      "Type" : "AWS::EC2::Subnet::Id",
+      "Description" : "Enter the subnet you want to deploy the instance to."
+    },
+
+    "Key" : {
+      "Description": "The name of an EC2 Key Pair to allow SSH access to the instance.",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+
+    "InstanceType": {
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium"
+      ],
+      "ConstraintDescription": "Must be a valid EC2 HVM instance type.",
+      "Default": "t2.micro",
+      "Description": "EC2 HVM instance type (m3.medium, etc).",
+      "Type": "String"
+    },
+
+    "ElbCertPath" : {
+      "Default": "/certname",
+      "Description": "The path and the name of the SSL cert for https elb traffic. Unless specified otherwise, the path will be \"/\"",
+      "Type": "String"
+    },
+
+    "S3Bucket" : {
+      "Default": "docker-registry",
+      "Description": "The name of the s3 bucket to be used as the registry's backend",
+      "Type": "String"
+    }
+
+  },
+
+  "Resources": {
+
+    "InstanceSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Allow SSH and HTTPS to the instance",
+        "VpcId" : {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          { "IpProtocol": "tcp", "FromPort": "22","ToPort": "22", "CidrIp": {"Ref": "TrustedIpBlock"} }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": { "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "sg" ]]}}
+        ]
+      }
+    },
+
+    "ElbSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "ELB Auth SecurityGroup",
+        "VpcId" : {"Ref": "VPC"},
+        "SecurityGroupIngress": [
+          { "IpProtocol": "tcp", "FromPort": "443","ToPort": "443", "CidrIp": {"Ref": "HttpsIpBlock"} }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": { "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "elb-sg" ]]}}
+        ]
+      }
+    },
+
+    "Ingress5000Elb": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": { "Fn::GetAtt": [ "InstanceSG", "GroupId" ] },
+        "IpProtocol": "tcp", "FromPort": "5000","ToPort": "5000", "SourceSecurityGroupId": { "Fn::GetAtt": [ "ElbSG", "GroupId" ] }
+      }
+    },
+
+    "Elb": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "CrossZone": "true",
+        "SecurityGroups": [ { "Fn::GetAtt": [ "ElbSG" ,"GroupId" ] } ],
+        "Scheme" : "internet-facing",
+        "Subnets" : [ { "Ref" : "Subnet" } ],
+        "Listeners": [
+          { "LoadBalancerPort": "443", "InstancePort": "5000", "Protocol": "HTTPS", "InstanceProtocol": "HTTP",
+            "SSLCertificateId" : { "Fn::Join":["", [ "arn:aws:iam::", { "Ref":"AWS::AccountId" }, ":server-certificate", { "Ref":"ElbCertPath" } ] ] } }
+        ],
+        "HealthCheck": {
+          "Target": "HTTP:5000/",
+          "HealthyThreshold": "2",
+          "UnhealthyThreshold": "3",
+          "Interval": "30",
+          "Timeout": "2"
+        },
+        "Instances": [ { "Ref" : "Instance" } ],
+        "Tags": [
+          {"Key": "Name", "Value": { "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "elb" ]]}}
+        ]
+      }
+    },
+
+
+    "Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [ {
+            "Effect": "Allow",
+            "Principal": {
+              "Service":["ec2.amazonaws.com"]
+            },
+            "Action": "sts:AssumeRole"
+          }]
+        },
+        "Path": "/",
+        "Policies": [ {
+          "PolicyName": "ops",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Action": [
+                  "s3:ListBucket",
+                  "s3:GetBucketLocation"
+                ],
+                "Effect": "Allow",
+                "Resource": { "Fn::Join": [ "", [ "arn:aws:s3:::", {"Ref": "S3Bucket"} ]]}
+              },
+              {
+                "Action": [
+                  "s3:List*",
+                  "s3:Get*",
+                  "s3:Put*",
+                  "s3:Delete*"
+                ],
+                "Effect": "Allow",
+                "Resource": { "Fn::Join": [ "", [ "arn:aws:s3:::", {"Ref": "S3Bucket"} ,"/*" ]]}
+              }
+            ]
+          }
+        }]
+      }
+    },
+
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{"Ref": "Role"}]
+      }
+    },
+
+
+    "Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": { "Fn::FindInMap": [ "AWSRegionToAMI", { "Ref": "AWS::Region" }, "AMI" ]},
+        "KeyName": { "Ref" : "Key" },
+        "InstanceType": { "Ref" : "InstanceType" },
+        "IamInstanceProfile": {"Ref":"InstanceProfile"},
+        "SecurityGroupIds": [
+          { "Fn::GetAtt": [ "InstanceSG", "GroupId" ] }
+        ],
+        "SourceDestCheck": true,
+        "SubnetId": { "Ref" : "Subnet" },
+        "Tags": [
+          {"Key": "Name", "Value": { "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" } ]]}}
+        ],
+        "UserData" : { "Fn::Base64":
+          { "Fn::Join": [ "", [
+            "#cloud-config\n\n",
+            "coreos:\n",
+            "  units:\n",
+
+            "    - name: registry-cache.service\n",
+            "      command: start\n",
+            "      content: |\n",
+            "        [Unit]\n",
+            "        Description=Redis cache for docker registry\n",
+            "        After=docker.service\n",
+            "        Requires=docker.service\n",
+            "        [Service]\n",
+            "        Restart=always\n",
+            "        ExecStartPre=/usr/bin/docker build -t %p /home/core/build/redis/\n",
+            "        ExecStartPre=-/usr/bin/docker rm %p\n",
+            "        ExecStart=/usr/bin/docker run --name %p %p\n",
+            "        ExecStop=/usr/bin/docker stop %p\n",
+
+            "    - name: private-registry.service\n",
+            "      command: start\n",
+            "      content: |\n",
+            "        [Unit]\n",
+            "        Description=Docker registry\n",
+            "        After=docker.service\n",
+            "        Requires=docker.service\n",
+            "        [Service]\n",
+            "        Restart=always\n",
+            "        ExecStartPre=/usr/bin/docker build -t %p /home/core/build/registry/\n",
+            "        ExecStartPre=-/usr/bin/docker rm %p\n",
+            "        ExecStart=/bin/bash -c 'docker run --name %p \\\n",
+            "             --link registry-cache:redis \\\n",
+            "             -p 5000:5000 \\\n",
+            "             %p' \n",
+            "        ExecStop=/usr/bin/docker stop %p\n",
+
+            "write_files:\n",
+            "  - path: /home/core/build/redis/Dockerfile\n",
+            "    content: |\n",
+            "      FROM redis\n",
+            "      RUN mkdir /var/log/redis && chown redis /var/log/redis\n",
+            "      COPY redis.conf /usr/local/etc/redis/redis.conf\n",
+            "      CMD [ \"redis-server\", \"/usr/local/etc/redis/redis.conf\" ]\n",
+
+            "  - path: /home/core/build/redis/redis.conf\n",
+            "    content: |\n",
+            "      maxmemory 300mb\n",
+            "      maxmemory-policy allkeys-lru\n",
+            "      dir /data\n",
+            "      daemonize no\n",
+            "      logfile /var/log/redis/redis-server.log\n",
+
+            "  - path: /home/core/build/registry/Dockerfile\n",
+            "    content: |\n",
+            "      FROM registry\n",
+            "      ENV REGISTRY_STORAGE=s3\n",
+            "      ENV AWS_BUCKET=", {"Ref": "S3Bucket"}, "\n",
+            "      ENV SEARCH_BACKEND=sqlalchemy\n",
+            "      ENV CACHE_REDIS_HOST=redis\n",
+            "      ENV CACHE_REDIS_PORT=6379\n",
+            "      ENV CACHE_LRU_REDIS_HOST=redis\n",
+            "      ENV CACHE_LRU_REDIS_PORT=6379\n",
+
+            ""
+            ] ]
+          }
+        }
+      }
+    }
+  },
+
+  "Outputs" : {
+
+    "InstanceIp" : {
+      "Description" : "IP of the Instance.",
+      "Value" : { "Fn::GetAtt": [ "Instance", "PublicIp" ] }
+    },
+
+    "InstanceDnsName" : {
+      "Description" : "DNS Name of the Instance.",
+      "Value" : { "Fn::GetAtt": [ "Instance", "PublicDnsName" ] }
+    },
+
+    "ElbDnsName" : {
+      "Description" : "DNS Name of the ELB.",
+      "Value" : { "Fn::GetAtt": [ "Elb", "DNSName" ] }
+    }
+  }
+}
