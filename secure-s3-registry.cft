@@ -91,6 +91,12 @@
       "Default": "docker-registry",
       "Description": "The name of the s3 bucket to be used as the registry's backend",
       "Type": "String"
+    },
+
+    "S3BucketRegion" : {
+      "Default": "eu-west-1",
+      "Description": "The region your s3 bucket is located",
+      "Type": "String"
     }
 
   },
@@ -117,7 +123,8 @@
         "GroupDescription": "ELB Auth SecurityGroup",
         "VpcId" : {"Ref": "VPC"},
         "SecurityGroupIngress": [
-          { "IpProtocol": "tcp", "FromPort": "443","ToPort": "443", "CidrIp": {"Ref": "HttpsIpBlock"} }
+          { "IpProtocol": "tcp", "FromPort": "443","ToPort": "443", "CidrIp": {"Ref": "HttpsIpBlock"} },
+          { "IpProtocol": "tcp", "FromPort": "80","ToPort": "80", "CidrIp": {"Ref": "HttpsIpBlock"} }
         ],
         "Tags": [
           {"Key": "Name", "Value": { "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "elb-sg" ]]}}
@@ -129,7 +136,7 @@
       "Type": "AWS::EC2::SecurityGroupIngress",
       "Properties": {
         "GroupId": { "Fn::GetAtt": [ "InstanceSG", "GroupId" ] },
-        "IpProtocol": "tcp", "FromPort": "5000","ToPort": "5000", "SourceSecurityGroupId": { "Fn::GetAtt": [ "ElbSG", "GroupId" ] }
+        "IpProtocol": "tcp", "FromPort": "80","ToPort": "80", "SourceSecurityGroupId": { "Fn::GetAtt": [ "ElbSG", "GroupId" ] }
       }
     },
 
@@ -141,11 +148,11 @@
         "Scheme" : "internet-facing",
         "Subnets" : [ { "Ref" : "Subnet" } ],
         "Listeners": [
-          { "LoadBalancerPort": "443", "InstancePort": "5000", "Protocol": "HTTPS", "InstanceProtocol": "HTTP",
+          { "LoadBalancerPort": "443", "InstancePort": "80", "Protocol": "HTTPS", "InstanceProtocol": "HTTP",
             "SSLCertificateId" : { "Fn::Join":["", [ "arn:aws:iam::", { "Ref":"AWS::AccountId" }, ":server-certificate", { "Ref":"ElbCertPath" } ] ] } }
         ],
         "HealthCheck": {
-          "Target": "HTTP:5000/",
+          "Target": "HTTP:80/",
           "HealthyThreshold": "2",
           "UnhealthyThreshold": "3",
           "Interval": "30",
@@ -263,6 +270,23 @@
             "             %p' \n",
             "        ExecStop=/usr/bin/docker stop %p\n",
 
+            "    - name: registry-frontend.service\n",
+            "      command: start\n",
+            "      content: |\n",
+            "        [Unit]\n",
+            "        Description=Docker registry frontend\n",
+            "        After=docker.service\n",
+            "        Requires=docker.service\n",
+            "        [Service]\n",
+            "        Restart=always\n",
+            "        ExecStartPre=/usr/bin/docker build -t %p /home/core/build/frontend/\n",
+            "        ExecStartPre=-/usr/bin/docker rm %p\n",
+            "        ExecStart=/bin/bash -c 'docker run --name %p \\\n",
+            "             --link private-registry:registry \\\n",
+            "             -p 80:80 \\\n",
+            "             %p' \n",
+            "        ExecStop=/usr/bin/docker stop %p\n",
+
             "write_files:\n",
             "  - path: /home/core/build/redis/Dockerfile\n",
             "    content: |\n",
@@ -281,14 +305,21 @@
 
             "  - path: /home/core/build/registry/Dockerfile\n",
             "    content: |\n",
-            "      FROM registry\n",
+            "      FROM registry:2\n",
             "      ENV REGISTRY_STORAGE=s3\n",
-            "      ENV AWS_BUCKET=", {"Ref": "S3Bucket"}, "\n",
+            "      ENV REGISTRY_STORAGE_S3_REGION=", {"Ref": "S3BucketRegion"}, "\n",
+            "      ENV REGISTRY_STORAGE_S3_BUCKET=", {"Ref": "S3Bucket"}, "\n",
             "      ENV SEARCH_BACKEND=sqlalchemy\n",
             "      ENV CACHE_REDIS_HOST=redis\n",
             "      ENV CACHE_REDIS_PORT=6379\n",
             "      ENV CACHE_LRU_REDIS_HOST=redis\n",
             "      ENV CACHE_LRU_REDIS_PORT=6379\n",
+
+            "  - path: /home/core/build/frontend/Dockerfile\n",
+            "    content: |\n",
+            "      FROM konradkleine/docker-registry-frontend:v2\n",
+            "      ENV ENV_DOCKER_REGISTRY_HOST=registry\n",
+            "      ENV ENV_DOCKER_REGISTRY_PORT=5000\n",
 
             ""
             ] ]
