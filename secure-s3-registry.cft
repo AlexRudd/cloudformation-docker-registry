@@ -102,8 +102,9 @@
     "HtpasswdUsers" : {
       "Default": "user1:$2a$04$OrczwZtRN/BKD/oSk7okKufZ5lVZ7e9I6rHBEfb64uNKFZQ5OpbDa\nuser2:$2a$04$ZxmjNfSwYfDnE8adFgZyw.p9Yf19LGpru6rx.T3tvsg4UvSQ3Alim",
       "Description": "The contents of your htpasswd file with BCrypt encrypted passwords. each entry should be separted by a newline escape sequence '\n'",
-      "Type": "String"
-    },
+      "Type": "String",
+      "NoEcho": true
+    }
 
   },
 
@@ -320,6 +321,7 @@
             "      ", {"Ref": "HtpasswdUsers"}, "\n",
 
             "  - path: /home/core/build/registry/config.yml\n",
+            "    content: |\n",
             "      version: 0.1\n",
             "      log:\n",
             "        level: info\n",
@@ -339,11 +341,12 @@
             "          blobdescriptor: redis\n",
             "      auth:\n",
             "        htpasswd:\n",
-            "          htpasswd:\n",
-            "            realm: basic-realm\n",
-            "            path: /auth/htpasswd\n",
+            "          realm: basic-realm\n",
+            "          path: /auth/htpasswd\n",
             "      redis:\n",
             "        addr: redis:6379\n",
+            "      http:\n",
+            "        addr: 0.0.0.0:5000\n",
 
             "  - path: /home/core/build/frontend/Dockerfile\n",
             "    content: |\n",
