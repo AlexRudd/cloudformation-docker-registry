@@ -97,7 +97,13 @@
       "Default": "eu-west-1",
       "Description": "The region your s3 bucket is located",
       "Type": "String"
-    }
+    },
+
+    "HtpasswdUsers" : {
+      "Default": "user1:$2a$04$OrczwZtRN/BKD/oSk7okKufZ5lVZ7e9I6rHBEfb64uNKFZQ5OpbDa\nuser2:$2a$04$ZxmjNfSwYfDnE8adFgZyw.p9Yf19LGpru6rx.T3tvsg4UvSQ3Alim",
+      "Description": "The contents of your htpasswd file with BCrypt encrypted passwords. each entry should be separted by a newline escape sequence '\n'",
+      "Type": "String"
+    },
 
   },
 
@@ -306,14 +312,38 @@
             "  - path: /home/core/build/registry/Dockerfile\n",
             "    content: |\n",
             "      FROM registry:2\n",
-            "      ENV REGISTRY_STORAGE=s3\n",
-            "      ENV REGISTRY_STORAGE_S3_REGION=", {"Ref": "S3BucketRegion"}, "\n",
-            "      ENV REGISTRY_STORAGE_S3_BUCKET=", {"Ref": "S3Bucket"}, "\n",
-            "      ENV SEARCH_BACKEND=sqlalchemy\n",
-            "      ENV CACHE_REDIS_HOST=redis\n",
-            "      ENV CACHE_REDIS_PORT=6379\n",
-            "      ENV CACHE_LRU_REDIS_HOST=redis\n",
-            "      ENV CACHE_LRU_REDIS_PORT=6379\n",
+            "      COPY config.yml /etc/docker/registry/config.yml\n",
+            "      COPY htpasswd /auth/htpasswd\n",
+
+            "  - path: /home/core/build/registry/htpasswd\n",
+            "    content: |\n",
+            "      ", {"Ref": "HtpasswdUsers"}, "\n",
+
+            "  - path: /home/core/build/registry/config.yml\n",
+            "      version: 0.1\n",
+            "      log:\n",
+            "        level: info\n",
+            "        formatter: text\n",
+            "        fields:\n",
+            "          service: registry\n",
+            "      storage:\n",
+            "        s3:\n",
+            "          region: ", {"Ref": "S3BucketRegion"}, "\n",
+            "          bucket: ", {"Ref": "S3Bucket"}, "\n",
+            "          encrypt: true\n",
+            "          secure: true\n",
+            "          v4auth: true\n",
+            "        delete:\n",
+            "          emabled: true\n",
+            "        cache:\n",
+            "          blobdescriptor: redis\n",
+            "      auth:\n",
+            "        htpasswd:\n",
+            "          htpasswd:\n",
+            "            realm: basic-realm\n",
+            "            path: /auth/htpasswd\n",
+            "      redis:\n",
+            "        addr: redis:6379\n",
 
             "  - path: /home/core/build/frontend/Dockerfile\n",
             "    content: |\n",
