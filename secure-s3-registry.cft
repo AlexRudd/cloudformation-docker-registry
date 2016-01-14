@@ -139,7 +139,7 @@
       }
     },
 
-    "Ingress5000Elb": {
+    "Ingress80Elb": {
       "Type": "AWS::EC2::SecurityGroupIngress",
       "Properties": {
         "GroupId": { "Fn::GetAtt": [ "InstanceSG", "GroupId" ] },
@@ -188,7 +188,7 @@
         },
         "Path": "/",
         "Policies": [ {
-          "PolicyName": "ops",
+          "PolicyName": "docker-registry",
           "PolicyDocument": {
             "Version": "2012-10-17",
             "Statement": [
