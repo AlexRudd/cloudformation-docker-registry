@@ -8,7 +8,7 @@ The instance is put behind an ELB with an HTTPS and HTTP listener, you can confi
 
 Basic Auth is enabled through the use of an [htpasswd](http://weavervsworld.com/docs/other/passprotect.html) file. You can configure the users in this file through CloudFormation parameters.
 
-Images are pushed through the web frontend into the registry. If this is causing any problems, the frontend can be ignored and the elb listener can direct requests staright to the registry on port 5000 (update listener and update instace security group ingress rules)
+Images are pushed [through the web frontend](https://github.com/kwk/docker-registry-frontend#use-the-application-as-the-registry) into the registry. [If this is causing any problems](https://github.com/kwk/docker-registry-frontend/issues/75), the frontend can be ignored and the elb listener can be changed to direct requests straight to the registry on port 5000 (update listener and update instance security group ingress rules)
 
 This template does not create a Route53 record as this is generally easier to do manually. Take the ELB DNS adress from the template's outputs and create a CNAME record set pointing to this address.
 
