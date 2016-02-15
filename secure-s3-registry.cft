@@ -4,34 +4,44 @@
   "Mappings": {
     "AWSRegionToAMI": {
       "eu-central-1": {
-        "AMI": "ami-ffafb293"
+        "hvm": "ami-f0e8f09c",
+        "pv": "ami-e8ebf384"
       },
       "ap-northeast-1": {
-        "AMI": "ami-dae8c1b4"
+        "hvm": "ami-a93802c7",
+        "pv": "ami-673b0109"
       },
       "us-gov-west-1": {
-        "AMI": "ami-a98e33c8"
+        "hvm": "ami-46e05c27",
+        "pv": "ami-87d66ae6"
       },
       "sa-east-1": {
-        "AMI": "ami-4e981c22"
+        "hvm": "ami-6c1a9a00",
+        "pv": "ami-a41b9bc8"
       },
       "ap-southeast-2": {
-        "AMI": "ami-eeadf58d"
+        "hvm": "ami-d0a783b3",
+        "pv": "ami-2da1854e"
       },
       "ap-southeast-1": {
-        "AMI": "ami-085a9a6b"
+        "hvm": "ami-4a65aa29",
+        "pv": "ami-8f69a6ec"
       },
       "us-east-1": {
-        "AMI": "ami-cbfdb2a1"
+        "hvm": "ami-dfb699b5",
+        "pv": "ami-94b49bfe"
       },
       "us-west-2": {
-        "AMI": "ami-16cfd277"
+        "hvm": "ami-abc82ecb",
+        "pv": "ami-e6c82e86"
       },
       "us-west-1": {
-        "AMI": "ami-0eacc46e"
+        "hvm": "ami-4d2d5b2d",
+        "pv": "ami-912d5bf1"
       },
       "eu-west-1": {
-        "AMI": "ami-c26bcab1"
+        "hvm": "ami-1461d767",
+        "pv": "ami-9063d5e3"
       }
     }
   },
@@ -234,7 +244,7 @@
     "Instance": {
       "Type": "AWS::EC2::Instance",
       "Properties": {
-        "ImageId": { "Fn::FindInMap": [ "AWSRegionToAMI", { "Ref": "AWS::Region" }, "AMI" ]},
+        "ImageId": { "Fn::FindInMap": [ "AWSRegionToAMI", { "Ref": "AWS::Region" }, "hvm" ]},
         "KeyName": { "Ref" : "Key" },
         "InstanceType": { "Ref" : "InstanceType" },
         "IamInstanceProfile": {"Ref":"InstanceProfile"},
